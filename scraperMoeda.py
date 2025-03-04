@@ -1,5 +1,17 @@
 import requests
 import pandas as pd
+import logging
+import os
+from datetime import date, datetime, timedelta
+
+log_directory = r'C:\\Users\\Eduardo\\OneDrive\\Documentos\\Portfolio\\logs' 
+log_filename = os.path.join(log_directory, 'scraperMoeda.log')
+logging.basicConfig(
+   filename=log_filename,
+   level=logging.INFO, 
+   format='%(asctime)s - %(levelname)s - %(message)s',
+   datefmt='%Y-%m-%d %H:%M:%S'
+)
 
 class Main():
 
@@ -34,6 +46,7 @@ def dataFrame(rates):
     print("Dados salvos em taxas_cambio.csv\nCâmbio: Euro")
     df = pd.read_csv("taxas_cambio.csv")
     print(df)
+    logging.info(df)
 
 
 
