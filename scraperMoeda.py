@@ -3,6 +3,8 @@ import pandas as pd
 import logging
 import os
 from datetime import date, datetime, timedelta
+from sklearn.ensemble import IsolationForest
+import api
 
 log_directory = r'C:\\Users\\Eduardo\\OneDrive\\Documentos\\Portfolio\\logs' 
 log_filename = os.path.join(log_directory, 'scraperMoeda.log')
@@ -20,35 +22,65 @@ class Main():
 
     def executar(self):
 
-        api_key = '3465a40fa027044d680948a265576559'
-        url = f"https://api.exchangeratesapi.io/latest?base=EUR&symbols=USD,GBP,JPY,BRL&access_key={api_key}"
-
-        response = requests.get(url)
-        if response.status_code == 200:
+        print("------------------\nIniciando Execução\n------------------")
+        url = f"https://api.exchangeratesapi.io/latest?base=EUR&symbols=USD,GBP,JPY,BRL&access_key={api.api_key}" #"ocultei" pelo arquivo api.py
+        try:
+            response = requests.get(url)
             data = response.json()
-            rates = data['rates']
-            #print(rates)
 
-            for currency, rate in rates.items():
-                moeda = ({f"{currency}: {rate:.4f}"})
-                print(", ".join(map(str, moeda)))
+            if "rates" in data:
+                rates = data['rates']
+                self.print_rates(rates)
+                self.salvar_dados(rates)
+                self.detectar_variacao(rates)
+            else:
+                logging.error("Resposta da API não contém as taxas de câmbio.")
+                print("Erro: Dados de taxa não encontrados.")
+        except requests.exceptions.RequestException as e:
+            logging.error(f"Erro na requisição API: {e}")
+            print(f"Erro na requisição API: {e}")
+
+    def print_rates(self, rates):
+        for currency, rate in rates.items():
+            print(f"{currency}: {rate:.4f}")
+
+    def salvar_dados(self, rates):
+        hoje = datetime.today().strftime('%Y-%m-%d')
+        arquivo_csv = f"taxas_cambio_{hoje}.csv"
+
+        df = pd.DataFrame(rates.items(), columns=["Moeda", "Taxa"])
+        df.to_csv(arquivo_csv, index=False)
+        print(f"Dados salvos em {arquivo_csv}\nCâmbio: Euro")
+        logging.info(f"Dados de câmbio para EUR: {rates}")
         
+        print("\nDados de Câmbio Salvos:")
+        print(df.to_string(index=False))
+
+    def detectar_variacao(self, rates):
+        try:
+            df_antigo = pd.read_csv("taxas_cambio_historico.csv")
+        except FileNotFoundError:
+            df_antigo = pd.DataFrame(columns=["Moeda", "Taxa"])
+
+        hoje = datetime.today().strftime('%Y-%m-%d')
+        novo_df = pd.DataFrame(rates.items(), columns=["Moeda", "Taxa"])
+        novo_df["Data"] = hoje
+        df_antigo = pd.concat([df_antigo, novo_df])
+
+        df_antigo.to_csv("taxas_cambio_historico.csv", index=False)
+
+        modelo = IsolationForest(contamination=0.1)
+        variacao = modelo.fit_predict(df_antigo[["Taxa"]])
+
+        df_antigo["Variação"] = variacao
+        anomalies = df_antigo[df_antigo["Variação"] == -1]
+
+        if len(anomalies) > 0:
+            logging.warning(f"Variações significativas detectadas nas taxas de câmbio:\n{anomalies}")
+            print(f"Variações significativas detectadas:\n{anomalies}")
         else:
-            if "error" in data:
-                print(f"Erro na API: {data['error']['info']}")
-                return
-        dataFrame(rates)
-            
-def dataFrame(rates):
-
-    df = pd.DataFrame(rates.items(), columns=["Moeda", "Taxa"])
-    df.to_csv("taxas_cambio.csv", index=False)
-    print("Dados salvos em taxas_cambio.csv\nCâmbio: Euro")
-    df = pd.read_csv("taxas_cambio.csv")
-    print(df)
-    logging.info(df)
-
-
+            logging.info("Nenhuma variação significativa detectada.")
+            print("Nenhuma variação significativa detectada.")
 
 
 if __name__ == '__main__':
